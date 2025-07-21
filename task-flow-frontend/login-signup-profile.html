@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login/Signup/Profile</title>
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f4f4;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+    .container {
+      background: white;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      width: 300px;
+    }
+    h2 {
+      text-align: center;
+    }
+    input[type="text"],
+    input[type="password"],
+    select {
+      width: 100%;
+      padding: 10px;
+      margin: 10px 0;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+    button {
+      width: 100%;
+      padding: 10px;
+      background: #007BFF;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #0056b3;
+    }
+    #welcome {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container" id="signup">
+    <h2>Signup</h2>
+    <input type="text" id="signupUsername" placeholder="Username" />
+    <input type="password" id="signupPassword" placeholder="Password" />
+    <label for="signupRole" style="position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden;">Role</label>
+    <select id="signupRole">
+      <option value="admin">Admin</option>
+      <option value="manager">Manager</option>
+      <option value="team">Team Member</option>
+    </select>
+    <button onclick="handleSignup()">Signup</button>
+    <p style="text-align: center;">Already have an account? <a href="#" onclick="showLogin()">Login</a></p>
+  </div>
+
+  <div class="container" id="login" style="display:none">
+    <h2>Login</h2>
+    <input type="text" id="loginUsername" placeholder="Username" />
+    <input type="password" id="loginPassword" placeholder="Password" />
+    <button onclick="handleLogin()">Login</button>
+    <p style="text-align: center;">Don't have an account? <a href="#" onclick="showSignup()">Signup</a></p>
+  </div>
+
+  <div class="container" id="welcome">
+    <h2>Welcome</h2>
+    <p id="profileText"></p>
+    <button onclick="logout()">Logout</button>
+  </div>
+
+  <script>
+   const API = "http://localhost:5000/api"; // or your server URL
+
+function showLogin() {
+  document.getElementById('signup').style.display = 'none';
+  document.getElementById('login').style.display = 'block';
+}
+
+function showSignup() {
+  document.getElementById('login').style.display = 'none';
+  document.getElementById('signup').style.display = 'block';
+}
+
+async function handleSignup() {
+  const username = document.getElementById('signupUsername').value;
+  const password = document.getElementById('signupPassword').value;
+  const role = document.getElementById('signupRole').value;
+
+  try {
+    const res = await axios.post(`${API}/auth/signup`, { username, password, role });
+    alert("Signup successful. Please log in.");
+    showLogin();
+  } catch (err) {
+    alert(err.response?.data?.message || "Signup failed.");
+  }
+}
+
+async function handleLogin() {
+  const username = document.getElementById('loginUsername').value;
+  const password = document.getElementById('loginPassword').value;
+
+  try {
+    const res = await axios.post(`${API}/auth/login`, { username, password });
+    localStorage.setItem("token", res.data.token);
+    localStorage.setItem("currentUser", JSON.stringify(res.data.user));
+    window.location.href = "dashboard.html";
+  } catch (err) {
+    alert(err.response?.data?.message || "Login failed.");
+  }
+}
+
+    function logout() {
+      document.getElementById('welcome').style.display = 'none';
+      showLogin();
+    }
+  </script>
+</body>
+</html>

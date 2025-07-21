@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TaskFlow Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+</head>
+<body>
+  <div class="container">
+    <!-- ========== SIDEBAR ========== -->
+    <aside class="sidebar">
+      <div class="logo"><i class="fas fa-tasks"></i></div>
+
+      <!-- dynamic sidebar menu -->
+      <nav class="menu">
+        <ul id="sidebarMenu"><!-- filled by JS --></ul>
+      </nav>
+
+      <div class="profile">
+        <div class="avatar">
+          <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80" alt="profile">
+        </div>
+        <div class="user-info">
+          <h3 id="userName"></h3>
+          <p  id="userRole"></p>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ========== MAIN ========== -->
+    <main class="content">
+      <header>
+        <h1>Welcome Back, <span id="welcomeUser"></span></h1>
+        <p>Your task overview for today</p>
+      </header>
+
+      <div class="card-container"></div>
+
+      <section id="roleContent"><!-- detailed role panel loads here --></section>
+    </main>
+  </div>
+
+<!-- ========== DASHBOARD JS ========== -->
+<script>
+const API = "http://localhost:5000/api";
+
+const userRaw = localStorage.getItem("currentUser");
+let user;
+
+try {
+  user = JSON.parse(userRaw);
+  if (!user || !user.role) throw new Error();
+} catch (err) {
+  alert("You must log in first.");
+  window.location.href = "login-signup-profile.html";
+}
+
+const routes = {
+  admin: [
+    { icon:'fa-home', text:'Dashboard', path:'#dashboard' },
+    { icon:'fa-users', text:'Users', path:'#users' },
+    { icon:'fa-folder-open', text:'Projects', path:'#projects' },
+    { icon:'fa-thumbtack', text:'Tasks', path:'#tasks' },
+    { icon:'fa-sign-out-alt', text:'Logout', path:'#', logout:true }
+  ],
+  manager: [
+    { icon:'fa-home', text:'Dashboard', path:'#dashboard' },
+    { icon:'fa-folder-open', text:'Projects', path:'#projects' },
+    { icon:'fa-thumbtack', text:'Tasks', path:'#tasks' },
+    { icon:'fa-sign-out-alt', text:'Logout', path:'#', logout:true }
+  ],
+  team: [
+    { icon:'fa-home', text:'Dashboard', path:'#dashboard' },
+    { icon:'fa-thumbtack', text:'My Tasks', path:'#mytasks' },
+    { icon:'fa-sign-out-alt', text:'Logout', path:'#', logout:true }
+  ]
+};
+
+const sidebarMenu = document.getElementById("sidebarMenu");
+(routes[user.role] || []).forEach(({ icon, text, path, logout }) => {
+  const li = document.createElement("li");
+  const a = document.createElement("a");
+  a.href = path;
+  a.innerHTML = `<i class="fas ${icon}"></i><span>${text}</span>`;
+
+  if (logout) {
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      logoutUser();
+    });
+  } else {
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      if (text === "Users") loadUsersPanel();
+      else if (text === "Projects") loadProjectsPanel();
+      else if (text === "Tasks") loadTasksPanel();
+      else if (text === "My Tasks") loadMyTasksPanel();
+      else loadDefaultPanel();
+    });
+  }
+
+  li.appendChild(a);
+  sidebarMenu.appendChild(li);
+});
+
+document.getElementById("userName").textContent = user.username;
+document.getElementById("userRole").textContent = user.role.charAt(0).toUpperCase() + user.role.slice(1);
+document.getElementById("welcomeUser").textContent = user.username;
+
+function logoutUser() {
+  localStorage.removeItem("token");
+  localStorage.removeItem("currentUser");
+  alert("Logged out!");
+  window.location.href = "login-signup-profile.html";
+}
+
+function loadDefaultPanel() {
+  document.getElementById("roleContent").innerHTML = `<h2>${user.role.toUpperCase()} Dashboard</h2><p>Welcome!</p>`;
+}
+
+function loadUsersPanel() {
+  if (user.role !== "admin") return;
+  fetch(`${API}/users`, {
+    headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+  })
+  .then(res => res.json())
+  .then(data => {
+    let html = `
+      <h2>All Users</h2>
+      <table style="width:100%; margin-top:1rem;">
+        <thead>
+          <tr><th>Username</th><th>Role</th></tr>
+        </thead>
+        <tbody>
+          ${data.map(u => `<tr><td>${u.username}</td><td>${u.role}</td></tr>`).join("")}
+        </tbody>
+      </table>`;
+    document.getElementById("roleContent").innerHTML = html;
+  });
+}
+
+async function populateTeamMembers(selectId) {
+  try {
+    const res = await axios.get(`${API}/users/team`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+    });
+    const select = document.getElementById(selectId);
+    select.innerHTML = '';
+    res.data.forEach(user => {
+      const opt = document.createElement('option');
+      opt.value = user._id;
+      opt.textContent = user.username;
+      select.appendChild(opt);
+    });
+  } catch (err) {
+    console.error("Failed to load team members", err);
+  }
+}
+
+function loadProjectsPanel() {
+  document.getElementById("roleContent").innerHTML = `
+    <h2>Create Project</h2>
+    <div class="form-container" id="createProjectForm">
+    <form id="projectForm">
+      <input type="text" id="projectName" placeholder="Project Name" required />
+      <textarea id="projectDesc" placeholder="Description"></textarea>
+      <select id="projectMembers" multiple></select>
+      <button type="submit">Create</button>
+    </form>
+    </div>
+    <div id="projectListContainer" style="margin-top: 2rem;"></div>
+  `;
+
+  populateTeamMembers("projectMembers");
+  fetchAndRenderProjects(); // fetch project list initially
+
+  document.getElementById("projectForm").onsubmit = async function(e) {
+    e.preventDefault();
+    const name = document.getElementById("projectName").value;
+    const description = document.getElementById("projectDesc").value;
+    const members = Array.from(document.getElementById("projectMembers").selectedOptions).map(opt => opt.value);
+
+    try {
+      await axios.post(`${API}/projects`, { name, description, members }, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+      });
+      alert("Project created!");
+      document.getElementById("projectForm").reset();
+      fetchAndRenderProjects(); // refresh project list after creating
+    } catch (err) {
+      alert("Error: " + (err.response?.data?.message || "Could not create project"));
+    }
+  };
+}
+
+async function fetchAndRenderProjects() {
+  try {
+    const res = await axios.get(`${API}/projects`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+    });
+
+    const projects = res.data;
+    if (!projects.length) {
+      document.getElementById("projectListContainer").innerHTML = "<p>No projects available.</p>";
+      return;
+    }
+
+    let html = `
+      <h3>Project List</h3>
+      <table style="width:100%; border-collapse: collapse;">
+        <thead>
+          <tr style="text-align:left;">
+            <th>Name</th>
+            <th>Description</th>
+            <th>Team Members</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${projects.map(p => `
+            <tr>
+              <td>${p.name}</td>
+              <td>${p.description}</td>
+              <td>${p.members?.map(m => m.username || m).join(", ")}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    `;
+    document.getElementById("projectListContainer").innerHTML = html;
+  } catch (err) {
+    console.error("Failed to load projects", err);
+    document.getElementById("projectListContainer").innerHTML = "<p>Error loading projects.</p>";
+  }
+}
+
+async function populateProjects(selectId) {
+  try {
+    const res = await axios.get(`${API}/projects`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+    });
+    const select = document.getElementById(selectId);
+    select.innerHTML = '';
+    res.data.forEach(project => {
+      const opt = document.createElement('option');
+      opt.value = project._id;
+      opt.textContent = project.name;
+      select.appendChild(opt);
+    });
+  } catch (err) {
+    console.error("Failed to load projects", err);
+  }
+}
+
+
+function loadTasksPanel() {
+  document.getElementById("roleContent").innerHTML = `
+    <h2>Create Task</h2>
+     <div class="form-container" id="createTaskForm">
+    <form id="taskForm">
+      <label for="taskProject">Select Project</label>
+      <select id="taskProject" name="project" required>
+      <!-- options will be filled dynamically -->
+      </select>
+      <input type="text" id="taskTitle" placeholder="Task Title" required />
+      <textarea id="taskDesc" placeholder="Description"></textarea>
+      <select id="taskMembers" multiple></select>
+      <button type="submit">Create</button>
+    </form></div>
+     <div id="taskListContainer" style="margin-top:2rem;"></div>`;
+
+  populateTeamMembers("taskMembers");
+  populateProjects("taskProject");
+  fetchAndRenderTasks(); // 🔁 Show tasks on panel load
+
+
+  document.getElementById("taskForm").onsubmit = async function(e) {
+    e.preventDefault();
+    const title = document.getElementById("taskTitle").value;
+    const description = document.getElementById("taskDesc").value;
+    const members = Array.from(document.getElementById("taskMembers").selectedOptions).map(opt => opt.value);
+    const project = document.getElementById("taskProject").value;
+    if (!project) {
+      alert("Please select a project.");
+      return;
+    }
+    try {
+      await axios.post(`${API}/tasks`, { title, description, members,project }, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+      });
+      alert("Task created!");
+      fetchAndRenderTasks(); // 👈 to update list
+
+    } catch (err) {
+      alert("Error: " + (err.response?.data?.message || "Could not create task"));
+    }
+  };
+}
+
+function loadMyTasksPanel() {
+  if (user.role !== "team") return;
+
+  fetch(`${API}/tasks`, {
+    headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+  })
+  .then(res => res.json())
+  .then(data => {
+    let html = "<h2>My Tasks</h2>";
+    if (!data.length) {
+      html += "<p>No tasks assigned to you.</p>";
+    } else {
+      html += "<ul class='task-list'>";
+      data.forEach(t => {
+        html += `<li><strong>${t.title}</strong> — ${t.status} — <em>${t.projectId?.name || ''}</em></li>`;
+      });
+      html += "</ul>";
+    }
+
+    // 👇 Only show task list
+    document.getElementById("roleContent").innerHTML = `
+      <div class="my-task-list">${html}</div>
+    `;
+  })
+  .catch(err => {
+    console.error("Failed to load tasks", err);
+    document.getElementById("roleContent").innerHTML = "<p>Error loading tasks.</p>";
+  });
+}
+
+
+async function fetchAndRenderTasks() {
+  try {
+    const res = await axios.get(`${API}/tasks`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+    });
+
+    const tasks = res.data;
+    if (!tasks.length) {
+      document.getElementById("taskListContainer").innerHTML = "<p>No tasks available.</p>";
+      return;
+    }
+
+    let html = `<h3>All Tasks</h3><ul>`;
+    tasks.forEach(t => {
+      html += `<li><strong>${t.title}</strong> - ${t.status} — Project: <em>${t.projectId?.name || 'Unassigned'}</em></li>`;
+    });
+    html += "</ul>";
+
+    document.getElementById("taskListContainer").innerHTML = html;
+  } catch (err) {
+    console.error("Error fetching tasks", err);
+    document.getElementById("taskListContainer").innerHTML = "<p>Error loading tasks.</p>";
+  }
+}
+
+
+loadDefaultPanel();
+</script>
+
+</body>
+</html>
